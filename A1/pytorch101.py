@@ -424,7 +424,7 @@ def reshape_practice(x: Tensor) -> Tensor:
     #                      TODO: Implement this function                     #
     ##########################################################################
     # Replace "pass" statement with your code
-    
+    'I have to say it will take me a while to figure this one out'
     ##########################################################################
     #                            END OF YOUR CODE                            #
     ##########################################################################
