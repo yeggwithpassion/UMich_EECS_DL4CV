@@ -465,12 +465,15 @@ def zero_row_min(x: Tensor) -> Tensor:
     #                      TODO: Implement this function                     #
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    y = x.clone()
+    row_min_vals, row_min_idxs = x.min(dim = 1)
+    idx1 = torch.arange(0,x.shape[0])
+    y[idx1, row_min_idxs] = 0
+
     ##########################################################################
     #                            END OF YOUR CODE                            #
     ##########################################################################
     return y
-
 
 def batched_matrix_multiply(
     x: Tensor, y: Tensor, use_loop: bool = True
@@ -521,7 +524,9 @@ def batched_matrix_multiply_loop(x: Tensor, y: Tensor) -> Tensor:
     #                      TODO: Implement this function                      #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    z = torch.zeros(x.shape[0],x.shape[1],y.shape[2], dtype = x.dtype)
+    for i in range(x.shape[0]):
+      z[i] = x[i].mm(y[i])
     ###########################################################################
     #                           END OF YOUR CODE                              #
     ###########################################################################
@@ -552,7 +557,7 @@ def batched_matrix_multiply_noloop(x: Tensor, y: Tensor) -> Tensor:
     #                      TODO: Implement this function                      #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    z = x@y
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -587,7 +592,8 @@ def normalize_columns(x: Tensor) -> Tensor:
     #                      TODO: Implement this function                     #
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    y = x - x.sum(dim = 0)/x.shape[0]
+    y = y / (y ** 2 / (y.shape[0]-1)).sum(dim = 0).sqrt()
     ##########################################################################
     #                            END OF YOUR CODE                            #
     ##########################################################################
@@ -634,7 +640,9 @@ def mm_on_gpu(x: Tensor, w: Tensor) -> Tensor:
     #                      TODO: Implement this function                     #
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    x1 = x.cuda()
+    w1 = w.cuda()
+    y = x1.mm(w1).cpu()
     ##########################################################################
     #                            END OF YOUR CODE                            #
     ##########################################################################
