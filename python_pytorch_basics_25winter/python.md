@@ -448,6 +448,24 @@ Even though PyTorch provides a large number of numeric datatypes, the most commo
 | **`.ndim`** / **`.dim()`**   | `int`                | 张量的维度数量 (Rank)。                            | `3`                            |
 | **`.item()`**                | Python 标量          | 仅适用于包含单个元素的张量，将其转为 Python 数值。 | `11` (Python int/float)        |
 
+- `0维Tensor / scalar tensor`：
+
+  ```python
+  x = torch.tensor([1., 2., 3.])
+  s = x.sum()
+  print(s)            # tensor(6.)
+  print(s.shape)      # torch.Size([])
+  ```
+
+  - **与scalar的区别**: 一个 0-维 tensor，其数据完全处于 x 的 device 和 dtype 上；而如果`.item()`化为scalar，会导致dtype不受控(float32 -> float64), device转到CPU，产生负面影响
+  - 可以直接写入`多维tensor[i, j,...]  ← 0-维 tensor`
+
+- `一维Tensor`:
+
+  在`vectorization`中，有时候我们试图把整一行都替换成某个tensor，例如将`dist为二维tensor，dist[i]`换成`shape为(j,)的一维行张量`，但经过一系列张量之后我们手头上有的是一个`一维列向量`，那此时我们需不需要将这个列向量`.t()`再赋值进`dist`呢？
+
+  - 答案是不用的。因为`Tensor`概念下，一维张量就是一维张量，**没有行列之分**，所以我们直接赋值就行。而且事实上，如果说真的创造一个`shape为( , j )的tensor`，它其实是二维的而非一维！
+
 ------
 
 ### (2) **创建与初始化** (Creation & (Initialization))
@@ -480,17 +498,17 @@ Even though PyTorch provides a large number of numeric datatypes, the most commo
 
 ### (4) 数学运算与归约 (Math & Reduction)
 
-| **函数**                       | **In-place?**  | **返回类型/形状**      | **描述**                                                    |
-| ------------------------------ | -------------- | ---------------------- | ----------------------------------------------------------- |
-| `x + y` / `x * y`              | 否             | New Tensor             | 逐元素运算，支持**广播 (Broadcasting)**。                   |
-| `x.add_(y)` / `x.mul_(y)`      | **是** (带`_`) | `x` 自身               | 逐元素运算的 **In-place** 版本。                            |
-| `torch.dot(v, w)`              | 否             | Scalar Tensor (Rank 0) | 仅用于 1D 向量的点积。                                      |
-| `torch.mm(x, y)`               | 否             | New Tensor             | 仅用于 Rank 2 标准矩阵乘法 ($M \times K$ 和 $K \times N$)。 |
-| `x @ y` / `torch.matmul(x, y)` | 否             | New Tensor             | **通用乘法**，支持 1D/2D/3D (批量) 运算。                   |
-| `x.sum(dim=None)`              | 否             | Scalar 或 New Tensor   | 沿指定 `dim` 求和，该维度会被消除。                         |
-| `x.max(dim=None)`              | 否             | Scalar 或 Tuple        | 返回最大值 (及索引 `indices`，如果指定了 `dim`)。           |
-| `torch.sqrt(x)`                | 否             | New Tensor             | 逐元素求平方根。                                            |
-| `x.sum(dim, keepdim=True)`     | 否             | New Tensor             | 归约后保留被消除的维度（大小为 1），利于广播。              |
+| **函数**                       | **In-place?**  | **返回类型/形状**           | **描述**                                                     |
+| ------------------------------ | -------------- | --------------------------- | ------------------------------------------------------------ |
+| `x + y` / `x * y`              | 否             | New Tensor                  | 逐元素运算，支持**广播 (Broadcasting)**。                    |
+| `x.add_(y)` / `x.mul_(y)`      | **是** (带`_`) | `x` 自身                    | 逐元素运算的 **In-place** 版本。                             |
+| `torch.dot(v, w)`              | 否             | Scalar Tensor (Rank 0)      | 仅用于 1D 向量的点积。                                       |
+| `torch.mm(x, y)`               | 否             | New Tensor                  | 仅用于 Rank 2 标准矩阵乘法 ($M \times K$ 和 $K \times N$)。  |
+| `x @ y` / `torch.matmul(x, y)` | 否             | New Tensor                  | **矩阵乘法**，支持 1D/2D/3D (批量) 运算。                    |
+| `x.sum(dim=None)`              | 否             | scalar tensor 或 New Tensor | 沿指定 `dim` 求和，该维度会被消除。无dim参数则直接生成0维tensor，可以直接赋值进`二维tensor[i][j]` |
+| `x.max(dim=None)`              | 否             | Scalar 或 Tuple             | 返回最大值 (及索引 `indices`，如果指定了 `dim`)。            |
+| `torch.sqrt(x)`                | 否             | New Tensor                  | 逐元素求平方根。                                             |
+| `x.sum(dim, keepdim=True)`     | 否             | New Tensor                  | 归约后保留被消除的维度（大小为 1），利于广播。               |
 
 ------
 
@@ -514,3 +532,36 @@ Even though PyTorch provides a large number of numeric datatypes, the most commo
 | `torch.cuda.is_available()` | 否            | `bool`            | 检查环境中是否有可用的 CUDA GPU。                            |
 | `torch.cuda.synchronize()`  | 否            | None (等待)       | **强制同步**，使 CPU 等待 GPU 完成所有排队任务（常用于精确计时）。 |
 | `torch.device('cuda')`      | 否            | `torch.device`    | 创建设备对象，推荐用于灵活的设备管理。                       |
+
+-----
+
+### （7）Broadcast 广播机制
+
+两个 Tensor 能够广播的**充要条件**是，从它们的**尾部维度 (trailing dimensions)** 开始比较，满足以下任一条件：
+
+1. **维度相等**：两个 Tensor 在该维度的长度相同。
+2. **维度为 1**：其中一个 Tensor 在该维度的长度为 1 (可以被拉伸/复制)。
+3. **维度缺失**：其中一个 Tensor 已经没有更多的维度了 (可以被视为长度为 1 的维度)
+
+- 例子：二维tensor + 一维tensor
+
+| **操作**                        | **A Shape** | **B/C Shape** | **隐式对齐的 B/C Shape**                                 | **是否成功** | **Result Shape** |
+| ------------------------------- | ----------- | ------------- | -------------------------------------------------------- | ------------ | ---------------- |
+| **$A + B$**                     | $(i, j)$    | $(i)$         | $(\mathbf{i}, \mathbf{j})$ vs $(\mathbf{1}, \mathbf{i})$ | ❌ 失败       | N/A              |
+| **$A + C$**                     | $(i, j)$    | $(j)$         | $(i, j)$ vs $(\mathbf{1}, j)$                            | ✅ 成功       | $(i, j)$         |
+| **$A + B.\text{unsqueeze}(1)$** | $(i, j)$    | $(i)$         | $(i, j)$ vs $(i, \mathbf{1})$                            | ✅ 成功       | $(i, j)$         |
+| $A + B.view(i,1)$               | $(i, j)$    | $(i)$         | $(i, j)$ vs $(i, \mathbf{1})$                            | ✅ 成功       | $(i, j)$         |
+
+**广播的结果形状 (Result Shape)**：
+
+最终结果 Tensor 的维度数量是两个输入 Tensor 中维度数量的较大值。结果 Tensor 在每个维度上的长度是两个输入 Tensor 在该维度上的长度的较大值。
+
+| **操作类型 (Op Type)**    | **示例 PyTorch 函数**        | **描述**                                          |
+| ------------------------- | ---------------------------- | ------------------------------------------------- |
+| **加法** (Addition)       | `torch.add(a, b)` 或 `a + b` | 广播 $b$ 的形状以匹配 $a$，然后执行逐元素加法。   |
+| **减法** (Subtraction)    | `torch.sub(a, b)` 或 `a - b` | 广播 $b$ 的形状以匹配 $a$，然后执行逐元素减法。   |
+| **乘法** (Multiplication) | `torch.mul(a, b)` 或 `a * b` | 广播 $b$ 的形状以匹配 $a$，然后执行逐元素乘法。   |
+| **除法** (Division)       | `torch.div(a, b)` 或 `a / b` | 广播 $b$ 的形状以匹配 $a$，然后执行逐元素除法。   |
+| **幂运算** (Power)        | `torch.pow(a, b)`            | 广播 $b$ 的形状以匹配 $a$，然后执行逐元素幂运算。 |
+| **比较运算** (Comparison) | `torch.gt(a, b)`, `a > b`    | 返回一个布尔型 Tensor，表示逐元素的比较结果。     |
+| **逻辑运算** (Logical)    | `torch.logical_and(a, b)`    | 返回逐元素的逻辑 AND/OR/XOR 结果。                |
